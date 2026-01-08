@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Double Take Dash</title>
+<style>
+body { background:#222; margin:0; font-family: monospace; }
+canvas {
+  border:3px solid #fff;
+  image-rendering: pixelated;
+  display:block;
+  margin:auto;
+  background:#d2a86b;
+}
+button {
+  display:block;
+  margin:auto;
+  padding:10px 20px;
+  font-size:20px;
+  cursor:pointer;
+  background:#fff;
+  border:2px solid #000;
+  border-radius:5px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game" width="512" height="512"></canvas>
+<button id="playButton">Play</button>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+canvas.setAttribute('tabindex','0');
+canvas.focus();
+canvas.addEventListener('click', () => { canvas.focus(); });
+
+const scale = 32;
+const rows = canvas.height / scale;
+const cols = canvas.width / scale;
+
+// Game states: menu, instructions, countdown, playing, gameover
+let state = 'menu';
+let countdown = 3;
+
+// Title animation
+let titleFloatOffset = 0;
+let titleFloatDir = 0.2;
+
+// Player
+let player = { x: Math.floor(cols/2), y: rows - 2, animFrame:0, moving:false };
+let lives = 3;
+let score = 0;
+
+// Obstacles, bonuses
+let obstacles = [];
+let bonuses = [];
+let extraLives = [];
+
+// Movement
+let left=false, right=false;
+canvas.addEventListener('keydown', e => {
+    if(state==='playing'){
+        if(e.key==='ArrowLeft') left=true;
+        if(e.key==='ArrowRight') right=true;
+    }
+    if(state==='instructions' && e.code==='Space') startCountdown();
+});
+canvas.addEventListener('keyup', e => {
+    if(state==='playing'){
+        if(e.key==='ArrowLeft') left=false;
+        if(e.key==='ArrowRight') right=false;
+    }
+});
+
+// Buttons
+const playButton = document.getElementById('playButton');
+playButton.addEventListener('click', () => {
+    if(state==='menu' || state==='gameover'){
+        state='instructions';
+        playButton.style.display='none';
+    }
+});
+
+// Start countdown from instructions
+function startCountdown(){
+    state='countdown';
+    countdown=3;
+    setTimeout(countdownTick,1000);
+}
+
+// Countdown tick
+function countdownTick(){
+    countdown--;
+    if(countdown>0) setTimeout(countdownTick,1000);
+    else { state='playing'; spawnTimers(); }
+}
+
+// Spawn bonuses/hearts
+function spawnTimers(){
+    setInterval(()=>{if(state==='playing' && Math.random()<0.08) bonuses.push({x:Math.floor(Math.random()*cols), y:0});},2000);
+    setInterval(()=>{if(state==='playing' && Math.random()<0.05 && lives<3) extraLives.push({x:Math.floor(Math.random()*cols), y:0});},5000);
+}
+
+// Update
+function update(){
+    if(state!=='playing') return;
+
+    player.moving=false;
+    if(left && player.x>0){ player.x--; player.moving=true; }
+    if(right && player.x<cols-1){ player.x++; player.moving=true; }
+
+    if(Math.random()<0.05) obstacles.push({x:Math.floor(Math.random()*cols), y:0, angle:0});
+
+    for(let i=obstacles.length-1;i>=0;i--){
+        obstacles[i].y+=0.2;
+        obstacles[i].angle+=0.2;
+        if(Math.floor(obstacles[i].y)===player.y && obstacles[i].x===player.x){
+            lives--; obstacles.splice(i,1);
+            if(lives<=0) state='gameover';
+        } else if(obstacles[i].y>rows) obstacles.splice(i,1);
+    }
+
+    for(let i=bonuses.length-1;i>=0;i--){
+        bonuses[i].y+=0.2;
+        if(Math.floor(bonuses[i].y)===player.y && bonuses[i].x===player.x){ score+=50; bonuses.splice(i,1); }
+        else if(bonuses[i].y>rows) bonuses.splice(i,1);
+    }
+
+    for(let i=extraLives.length-1;i>=0;i--){
+        extraLives[i].y+=0.2;
+        if(Math.floor(extraLives[i].y)===player.y && extraLives[i].x===player.x){ lives=Math.min(3,lives+1); extraLives.splice(i,1); }
+        else if(extraLives[i].y>rows) extraLives.splice(i,1);
+    }
+
+    if(player.moving) player.animFrame=(player.animFrame+1)%2;
+    score++;
+}
+
+// Draw
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(state==='menu'){
+        // Floating title
+        titleFloatOffset+=titleFloatDir;
+        if(titleFloatOffset>5||titleFloatOffset<-5) titleFloatDir*=-1;
+
+        ctx.font='48px monospace';
+        ctx.fillStyle='yellow';
+        ctx.strokeStyle='black';
+        ctx.lineWidth=3;
+        ctx.textAlign='center';
+        ctx.fillText('The Double Take', canvas.width/2, canvas.height/2-30+titleFloatOffset);
+        ctx.strokeText('The Double Take', canvas.width/2, canvas.height/2-30+titleFloatOffset);
+
+        ctx.fillStyle='cyan';
+        ctx.strokeStyle='black';
+        ctx.fillText('Dash', canvas.width/2, canvas.height/2+30+titleFloatOffset);
+        ctx.strokeText('Dash', canvas.width/2, canvas.height/2+30+titleFloatOffset);
+
+        playButton.style.display='block';
+    }
+    else if(state==='instructions'){
+        ctx.font='28px monospace';
+        ctx.fillStyle='white';
+        ctx.textAlign='center';
+        ctx.fillText('How to Play', canvas.width/2, 100);
+
+        ctx.font='20px monospace';
+        ctx.fillText('Use Arrow Keys to move Vinny', canvas.width/2, 160);
+        ctx.fillText('Dodge volleyballs', canvas.width/2, 200);
+        ctx.fillText('Collect hearts to gain lives', canvas.width/2, 240);
+
+        // Cool Bonus graphic
+        ctx.fillStyle='blue';
+        ctx.font='bold 28px monospace';
+        ctx.fillText('COOL BONUS', canvas.width/2, 300);
+        ctx.strokeStyle='white';
+        ctx.lineWidth=2;
+        ctx.strokeRect(canvas.width/2-90, 285, 180, 30);
+
+        ctx.fillStyle='white';
+        ctx.font='20px monospace';
+        ctx.fillText('Press SPACE to continue', canvas.width/2, 400);
+    }
+    else if(state==='countdown'){
+        ctx.fillStyle='#000';
+        ctx.font='72px monospace';
+        ctx.fillText(countdown, canvas.width/2, canvas.height/2);
+    }
+    else if(state==='playing' || state==='gameover'){
+        // Court tiles
+        for(let r=0;r<rows;r++){
+            for(let c=0;c<cols;c++){
+                ctx.fillStyle=(r+c)%2===0?'#d2a86b':'#c49f6c';
+                ctx.fillRect(c*scale,r*scale,scale,scale);
+            }
+        }
+        // Court line
+        ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(0, canvas.height/2); ctx.lineTo(canvas.width, canvas.height/2); ctx.stroke();
+
+        // Player
+        let px=player.x*scale, py=player.y*scale;
+        let armOffset=player.animFrame*2;
+        ctx.fillStyle='rgba(0,0,0,0.2)';
+        ctx.fillRect(px+4, py+60, 24, 6); // shadow
+
+        // head
+        ctx.fillStyle='#ffeb3b';
+        ctx.fillRect(px+8, py,16,16);
+
+        // jacket
+        ctx.fillStyle='#000';
+        ctx.fillRect(px+4, py+16,24,24);
+
+        // shirt
+        ctx.fillStyle='#0f0';
+        ctx.fillRect(px+6, py+20,20,16);
+
+        // pants
+        ctx.fillStyle='#333';
+        ctx.fillRect(px+8, py+40,16,16);
+
+        // shoes
+        ctx.fillStyle='#964B00';
+        ctx.fillRect(px+8, py+56,16,8);
+
+        // mic
+        ctx.fillStyle='#666'; ctx.fillRect(px+24+armOffset, py+30, 4, 8);
+        ctx.fillStyle='#ccc'; ctx.fillRect(px+24+armOffset, py+24, 8, 8);
+        ctx.fillStyle='#000'; ctx.font='6px monospace';
+        ctx.fillText('LSN', px+24+armOffset, py+30);
+
+        // obstacles
+        obstacles.forEach(o=>{
+            let ox=o.x*scale, oy=o.y*scale;
+            ctx.save();
+            ctx.translate(ox+scale/2, oy+scale/2);
+            ctx.rotate(o.angle);
+            ctx.fillStyle='#fff';
+            ctx.beginPath(); ctx.arc(0,0,scale/2-2,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle='#ccc';
+            ctx.lineWidth=1;
+            ctx.beginPath();
+            ctx.moveTo(-scale/2+4,0); ctx.lineTo(scale/2-4,0);
+            ctx.moveTo(0,-scale/2+4); ctx.lineTo(0,scale/2-4);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        // bonuses
+        bonuses.forEach(b=>{
+            let bx=b.x*scale, by=b.y*scale;
+            ctx.fillStyle='blue'; ctx.font='bold 20px monospace';
+            ctx.fillText('COOL BONUS', bx+8, by+16);
+        });
+
+        // extra lives
+        for(let i=0;i<lives;i++){
+            ctx.fillStyle='red';
+            ctx.beginPath();
+            ctx.arc(10+i*20,40,5,0,Math.PI*2);
+            ctx.fill();
+        }
+
+        // score
+        ctx.fillStyle='#fff';
+        ctx.font='24px monospace';
+        ctx.fillText('Score: '+score,10,30);
+
+        if(state==='gameover'){
+            ctx.fillStyle='#fff';
+            ctx.font='32px monospace';
+            ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+            playButton.style.display='block';
+        }
+    }
+}
+
+// Restart
+canvas.addEventListener('keydown', e=>{
+    if((e.key==='r'||e.key==='R') && state==='gameover') restartGame();
+});
+function restartGame(){
+    state='menu';
+    obstacles=[]; bonuses=[]; extraLives=[];
+    lives=3; score=0;
+}
+
+// Loop
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+loop();
+</script>
+
+</body>
+</html>
